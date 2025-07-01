@@ -41,3 +41,24 @@ plt.plot(df['frequency']/1e9, s21_magnitude_db)
 plt.xlabel('frequency (GHz)')
 plt.ylabel('s21 Magnitude (dB)')
 plt.show()
+
+# create a guassian pulse
+
+A = 1.0 # pulse amplitude
+FWHM = 200e-9
+SIGMA = FWHM / 2.355
+t0 = 0
+
+# time array
+t = np.linspace(-600e-9,600e-9,1000)
+
+# gaussian pulse
+pulse = A * np.exp(-((t - t0) ** 2) / (2 * SIGMA ** 2))
+
+plt.figure()
+plt.plot(t * 1e9, pulse)
+plt.xlabel('time (ns)')
+plt.ylabel('amplitude')
+plt.show()
+
+
