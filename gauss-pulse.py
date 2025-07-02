@@ -64,32 +64,39 @@ plt.xlabel('time (ns)')
 plt.ylabel('amplitude')
 plt.show()
 
-# Goal: filter the pulse using the data
+# Goal: filter the pulse using the data from the Network Analyzer
+def FilterSignal(my_signal, s21_real, s21_imagin, frequency, time):
+    # get the fft of the pulse
+    my_signal_fft = np.fft.fft(my_signal)
+    freq_pulse = np.fft.fftfreq(len(my_signal), time[1]-time[0])
 
-# get the fft of the pulse
-pulse_fft = np.fft.fft(pulse)
-freq_pulse = np.fft.fftfreq(len(pulse), t[1]-t[0])
+    # get the phase of s21 in radians and the linear magnitude of s21
+    s21_phase = np.arctan2(s21_imagin,s21_real)
+    s21_complex = s21_real + 1j * s21_imagin
+    s21_magnitude_linear = np.abs(s21_complex)
 
-# get the phase of s21 in radians and the linear magnitude of s21
-s21_phase = np.arctan2(df['s21_imag'],df['s21_real'])
-s21_complex = df['s21_real'] + 1j * df['s21_imag']
-s21_magnitude_linear = np.abs(s21_complex)
+    # interpolate s21 to get the same number of points as the pulse
+    s21_interp = np.interp(freq_pulse, frequency, s21_magnitude_linear) * \
+        np.exp(1j * np.interp(freq_pulse, frequency, s21_phase))
 
-# interpolate s21 to get the same number of points as the pulse
-s21_interp = np.interp(freq_pulse, df['frequency'], s21_magnitude_linear) * \
-    np.exp(1j * np.interp(freq_pulse, df['frequency'], s21_phase))
+    # filter the pulse
+    filtered_fft = my_signal_fft * s21_interp
+    filtered_signal = np.fft.ifft(filtered_fft)
 
-# filter the pulse
-filtered_fft = pulse_fft * s21_interp
-filtered_pulse = np.fft.ifft(filtered_fft)
+    # checks
+    plt.figure()
+    plt.plot(t, np.abs(filtered_signal))
+    plt.show()
 
-# checks
-plt.figure()
-plt.plot(t, np.abs(filtered_pulse))
-plt.show()
+    print(f"S21 magnitude range: {s21_magnitude_linear.min():.3f} to {s21_magnitude_linear.max():.3f}")
+    print(f"Original pulse max: {np.max(np.abs(my_signal)):.3f}")
+    print(f"Filtered pulse max: {np.max(np.abs(filtered_signal)):.3f}")
+    
+    return filtered_signal
 
-print(f"S21 magnitude range: {s21_magnitude_linear.min():.3f} to {s21_magnitude_linear.max():.3f}")
-print(f"Original pulse max: {np.max(np.abs(pulse)):.3f}")
-print(f"Filtered pulse max: {np.max(np.abs(filtered_pulse)):.3f}")
+# call filtered signal on pulse
+filtered_signal = FilterSignal(pulse, df['s21_real'], df['s21_imag'], df['frequency'], t)
+
+# Goal: create a FIR-wiener filter
 
 
