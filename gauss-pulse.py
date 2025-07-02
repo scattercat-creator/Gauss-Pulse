@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+# goal: turn s2p file into pandas dataframe
+
 network = rf.Network('filter_time_series.s2p')
 
 # save all parameters in s2p file
@@ -27,7 +29,7 @@ df = pd.DataFrame({
     's22_imag': s22.imag
 })
 
-# plot the gain (s21)
+# Goal: plot the gain (s21)
 
 # get rid of points i don't want
 df = df.drop(df.index[-75:])
@@ -42,7 +44,7 @@ plt.xlabel('frequency (GHz)')
 plt.ylabel('s21 Magnitude (dB)')
 plt.show()
 
-# create a guassian pulse
+# Goal: create a guassian pulse
 
 A = 1.0 # pulse amplitude
 FWHM = 200e-9
@@ -55,13 +57,14 @@ t = np.linspace(-600e-9,600e-9,1000)
 # gaussian pulse
 pulse = A * np.exp(-((t - t0) ** 2) / (2 * SIGMA ** 2))
 
+# check it
 plt.figure()
 plt.plot(t * 1e9, pulse)
 plt.xlabel('time (ns)')
 plt.ylabel('amplitude')
 plt.show()
 
-# filter the pulse using the data
+# Goal: filter the pulse using the data
 
 # get the fft of the pulse
 pulse_fft = np.fft.fft(pulse)
