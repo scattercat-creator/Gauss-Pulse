@@ -3,6 +3,7 @@ import skrf as rf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import signal
 
 # goal: turn s2p file into pandas dataframe
 
@@ -65,10 +66,11 @@ plt.ylabel('amplitude')
 plt.show()
 
 # Goal: filter the pulse using the data from the Network Analyzer
+
 def FilterSignal(my_signal, s21_real, s21_imagin, frequency, time):
     # get the fft of the pulse
     my_signal_fft = np.fft.fft(my_signal)
-    freq_pulse = np.fft.fftfreq(len(my_signal), time[1]-time[0])
+    freq_signal = np.fft.fftfreq(len(my_signal), time[1]-time[0])
 
     # get the phase of s21 in radians and the linear magnitude of s21
     s21_phase = np.arctan2(s21_imagin,s21_real)
@@ -76,8 +78,8 @@ def FilterSignal(my_signal, s21_real, s21_imagin, frequency, time):
     s21_magnitude_linear = np.abs(s21_complex)
 
     # interpolate s21 to get the same number of points as the pulse
-    s21_interp = np.interp(freq_pulse, frequency, s21_magnitude_linear) * \
-        np.exp(1j * np.interp(freq_pulse, frequency, s21_phase))
+    s21_interp = np.interp(freq_signal, frequency, s21_magnitude_linear) * \
+        np.exp(1j * np.interp(freq_signal, frequency, s21_phase))
 
     # filter the pulse
     filtered_fft = my_signal_fft * s21_interp
@@ -95,8 +97,51 @@ def FilterSignal(my_signal, s21_real, s21_imagin, frequency, time):
     return filtered_signal
 
 # call filtered signal on pulse
-filtered_signal = FilterSignal(pulse, df['s21_real'], df['s21_imag'], df['frequency'], t)
+filtered_pulse = FilterSignal(pulse, df['s21_real'], df['s21_imag'], df['frequency'], t)
 
 # Goal: create a FIR-wiener filter
 
+def WienerFIR(time, frequency, s21_real, s21_imaginary, num_taps=128, snr=100):
+    # define variables
+    N = num_taps
+    fs = 1/(time[1] - time[0])
+    freq_signal = np.fft.fftfreq(N, 1/fs)
+    
+    # get the phase of s21 in radians and the linear magnitude of s21
+    s21_phase = np.arctan2(s21_imaginary,s21_real)
+    s21_complex = s21_real + 1j * s21_imaginary
+    s21_magnitude_linear = np.abs(s21_complex)
 
+    # interpolate s21 to get the same number of points as the pulse
+    s21_interp = np.interp(freq_signal, frequency, s21_magnitude_linear) * \
+        np.exp(1j * np.interp(freq_signal, frequency, s21_phase))
+    
+    # Goal: create the wiener filter (formula)
+    s21_conj = np.conj(s21_interp) # complex conjugate
+    s21_power = np.abs(s21_interp)**2  # square conjugate
+    noise_power = 1.0 / snr # noise for distortion trade off
+    
+    H_wiener = s21_conj / (s21_power + noise_power)
+
+    # make symmetric
+    H_wiener[N//2:] = np.conj(H_wiener[N//2-1::-1])
+
+    # convert to time domain
+    fir_coeffs = np.fft.ifft(H_wiener).real
+    fir_coeffs = np.roll(fir_coeffs, N//2)
+
+    # add a window for smoothing
+    window = signal.windows.hamming(N)
+    fir_coeffs *= window
+    
+    return fir_coeffs
+
+# get coeffs for pulse
+pulse_coeffs = WienerFIR(t, df['frequency'], df['s21_real'], df['s21_imag'])
+
+# get the fully recovered pulse
+recovered_pulse = signal.lfilter(pulse_coeffs, 1, filtered_pulse.real)
+
+plt.figure()
+plt.plot(t, recovered_pulse)
+plt.show()
