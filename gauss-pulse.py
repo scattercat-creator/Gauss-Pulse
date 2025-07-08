@@ -145,8 +145,44 @@ def plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequenc
     plt.tight_layout()
     plt.show()
 
-def plot_ffts():
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+def plot_ffts(pulse, time, recovered):
+    pulse_fft = np.fft.fft(pulse)
+    freq_signal = np.fft.fftfreq(len(pulse), time[1] - time[0])
+    recovered_fft = np.fft.fft(recovered)
+
+    n = len(pulse)
+    freq_signal = freq_signal[:n//2]
+    pulse_fft = pulse_fft[:n//2]
+    recovered_fft = recovered_fft[:n//2]
+    # FFT of original pulse
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    axes[0].plot(freq_signal, np.abs(pulse_fft), 'b-', linewidth=2, label='original pulse fft')
+    axes[0].set_xlabel('frequency')
+    axes[0].set_ylabel('Amplitude')
+    axes[0].set_title('Original FFT')
+    axes[0].grid(True)
+
+    
+    # FFT of recovered pulse
+    axes[1].plot(freq_signal, np.abs(recovered_fft), 'g-', linewidth=2, label="Recovered pulse fft")
+    axes[1].set_xlabel('frequency')
+    axes[1].set_ylabel('amplitude')
+    axes[1].set_title('Recovered Signal\'s FFT')
+    axes[1].grid(True)
+
+    axes[2].plot(freq_signal, np.abs(pulse_fft), 'b-', linewidth=2, label="Original pulse fft")
+    axes[2].plot(freq_signal, np.abs(recovered_fft), 'g--', linewidth=2, label="Recovered pulse fft")
+
+    axes[2].set_xlabel('frequency')
+    axes[2].set_ylabel('amplitude')
+    axes[2].set_title('Recovered FFT vs Original FFT')
+    axes[2].legend()
+    axes[2].grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
 
 
 def main():
@@ -181,9 +217,7 @@ def main():
     print(f"Filtered pulse peak: {np.max(np.abs(filtered_pulse)):.3f}")
     
     filtered_pulse = add_noise_to_signal(filtered_pulse, 40)
-    plt.figure()
-    plt.plot(time,filtered_pulse)
-    plt.show()
+  
     # Step 4: Apply Wiener deconvolution
     print("4. Applying Wiener deconvolution...")
     recovered_pulse = wiener_deconvolution(filtered_pulse, time, frequency, s21, SNR)
@@ -212,6 +246,7 @@ def main():
     # Step 6: Plot results
     print("6. Plotting results...")
     plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequency, s21)
+    plot_ffts(original_pulse, time, recovered_pulse)
 
 
 if __name__ == "__main__":
