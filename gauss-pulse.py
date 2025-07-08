@@ -4,35 +4,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def load_s2p_filter(filename):
-    """Load S2P file and extract S21 parameters"""
+    # load s2p 
     network = rf.Network(filename)
     
-    # Extract S21 (forward transmission)
+    # Grab s21 values an frequency
     s21 = network.s[:,1,0]
     frequency = network.f
     
-    # Remove last 75 points if needed (adjust as necessary)
+    # Remove last 75 points to get rid of random noise
     s21 = s21[:-75]
     frequency = frequency[:-75]
     
     return frequency, s21
 
+# create a train of gaussian pulses
 def create_gaussian_pulse_train(duration=2e-6, num_points=2000, fwhm=100e-9, amplitude=1.0, num_pulses=5, spacing=300e-9):
-    """
-    Create a train of non-overlapping Gaussian pulses.
     
-    duration: total time window in seconds
-    num_points: number of time points in signal
-    fwhm: full-width at half max of each Gaussian pulse
-    amplitude: height of each pulse
-    num_pulses: number of pulses to generate
-    spacing: time between pulse centers in seconds
-    """
     t = np.linspace(-duration/2, duration/2, num_points)
     sigma = fwhm / 2.355
 
     pulse_train = np.zeros_like(t)
-    center_start = -((num_pulses - 1) / 2) * spacing  # centers centered in time window
+    center_start = -((num_pulses - 1) / 2) * spacing  # centers in time window
 
     for i in range(num_pulses):
         center = center_start + i * spacing
@@ -40,16 +32,15 @@ def create_gaussian_pulse_train(duration=2e-6, num_points=2000, fwhm=100e-9, amp
 
     return t, pulse_train
 
-
+# create regular gaussian pulse
 def create_gaussian_pulse(duration=1200e-9, num_points=1000, fwhm=200e-9, amplitude=1.0):
-    """Create a Gaussian pulse"""
     t = np.linspace(-duration/2, duration/2, num_points)
     sigma = fwhm / 2.355
     pulse = amplitude * np.exp(-(t ** 2) / (2 * sigma ** 2))
     return t, pulse
 
+# applies the s2p to a signal
 def apply_s2p_filter(pulse, time, frequency, s21):
-    """Apply S2P filter to the pulse"""
     # Get FFT of pulse
     pulse_fft = np.fft.fft(pulse)
     freq_signal = np.fft.fftfreq(len(pulse), time[1] - time[0])
@@ -68,24 +59,13 @@ def apply_s2p_filter(pulse, time, frequency, s21):
     return filtered_pulse
 
 def add_noise_to_signal(signal, snr_db):
-    """
-    Add white Gaussian noise to a signal at a specified SNR (in dB).
-
-    Parameters:
-    - signal: the original time-domain signal (1D numpy array)
-    - snr_db: desired signal-to-noise ratio in decibels
-
-    Returns:
-    - noisy_signal: signal with added noise
-    - noise: the actual noise added (can be useful for debugging)
-    """
     # Convert SNR from dB to linear scale
     snr_linear = 10 ** (snr_db / 10)
 
     # Calculate signal power
     signal_power = np.mean(np.abs(signal)**2)
 
-    # Calculate required noise power
+    # Calculate noise power
     noise_power = signal_power / snr_linear
 
     # Generate white Gaussian noise
@@ -98,12 +78,11 @@ def add_noise_to_signal(signal, snr_db):
 
 
 def wiener_deconvolution(filtered_pulse, time, frequency, s21, snr=10):
-    """Apply Wiener deconvolution to recover original pulse"""
     # Get FFT of filtered signal
     filtered_fft = np.fft.fft(filtered_pulse)
     freq_signal = np.fft.fftfreq(len(filtered_pulse), time[1] - time[0])
     
-    # Interpolate S21 to match signal frequency grid
+    # Interpolate S21 to match numpoints of signal
     freq_abs = np.abs(freq_signal)
     s21_interp = np.interp(freq_abs, frequency, s21)
     
@@ -166,39 +145,45 @@ def plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequenc
     plt.tight_layout()
     plt.show()
 
+def plot_ffts():
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+
 def main():
-    """Main program"""
     # Parameters
-    S2P_FILENAME = 'filter_time_series.s2p'  # Change this to your S2P file
+    S2P_FILENAME = 'filter_time_series.s2p' # Can change s2p to use different frequency responses
     PULSE_DURATION = 2e-6
     NUM_POINTS = 8192
-    PULSE_FWHM = 50e-9      # 50ns instead of 2ns
-    SPACING=400e-9          # 400ns spacing instead of 100ns
-    NUM_PULSES=3            # Fewer pulses for clarity
-    PULSE_AMPLITUDE = 1.0     # Pulse amplitude
-    SNR = 100                  # Signal-to-noise ratio for Wiener filter
+    PULSE_FWHM = 50e-9      
+    SPACING=400e-9         
+    NUM_PULSES=3            
+    PULSE_AMPLITUDE = 1.0    
+    SNR = 100 # Signal-to-noise ratio for Wiener filter
     
     print("=== S2P Filter and Wiener Recovery Program ===\n")
     
     # Step 1: Load S2P file
     print("1. Loading S2P filter...")
     frequency, s21 = load_s2p_filter(S2P_FILENAME)
-    print(f"   Loaded {len(frequency)} frequency points from {frequency[0]/1e9:.2f} to {frequency[-1]/1e9:.2f} GHz")
+    print(f"Loaded {len(frequency)} frequency points from {frequency[0]/1e9:.2f} to {frequency[-1]/1e9:.2f} GHz")
     
     # Step 2: Create Gaussian pulse
     print("2. Creating Gaussian pulse...")
     #time, original_pulse = create_gaussian_pulse(PULSE_DURATION, NUM_POINTS, PULSE_FWHM, PULSE_AMPLITUDE)
     time, original_pulse = create_gaussian_pulse_train(PULSE_DURATION, NUM_POINTS, PULSE_FWHM, PULSE_AMPLITUDE, NUM_PULSES, SPACING)
 
-    print(f"   Created pulse: {PULSE_FWHM*1e9:.0f} ns FWHM, {len(original_pulse)} points")
+    print(f"Created pulse: {PULSE_FWHM*1e9:.0f} ns FWHM, {len(original_pulse)} points")
     
     # Step 3: Apply S2P filter
     print("3. Applying S2P filter to pulse...")
     filtered_pulse = apply_s2p_filter(original_pulse, time, frequency, s21)
-    print(f"   Original pulse peak: {np.max(original_pulse):.3f}")
-    print(f"   Filtered pulse peak: {np.max(np.abs(filtered_pulse)):.3f}")
+    print(f"Original pulse peak: {np.max(original_pulse):.3f}")
+    print(f"Filtered pulse peak: {np.max(np.abs(filtered_pulse)):.3f}")
     
     filtered_pulse = add_noise_to_signal(filtered_pulse, 40)
+    plt.figure()
+    plt.plot(time,filtered_pulse)
+    plt.show()
     # Step 4: Apply Wiener deconvolution
     print("4. Applying Wiener deconvolution...")
     recovered_pulse = wiener_deconvolution(filtered_pulse, time, frequency, s21, SNR)
@@ -215,21 +200,19 @@ def main():
     correlation = np.corrcoef(original_pulse, recovered_pulse)[0, 1]
     
     # Calculate RMS error
+    rms_error = np.sqrt(np.mean((np.abs(original_pulse - filtered_pulse))**2))
+    print(f'og error: {rms_error}')
+
     rms_error = np.sqrt(np.mean((original_pulse - recovered_pulse)**2))
     
-    print(f"   Correlation coefficient: {correlation:.3f}")
-    print(f"   RMS error: {rms_error:.3f}")
-    print(f"   Peak recovery ratio: {np.max(np.abs(recovered_pulse))/np.max(original_pulse):.3f}")
+    print(f"Correlation coefficient: {correlation:.3f}")
+    print(f"RMS error: {rms_error:.3f}")
+    print(f"Peak recovery ratio: {np.max(np.abs(recovered_pulse))/np.max(original_pulse):.3f}")
     
     # Step 6: Plot results
     print("6. Plotting results...")
     plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequency, s21)
-    
-    print("\n=== Process Complete ===")
-    print("Tips for improving recovery:")
-    print("- Increase SNR for less noise but potential ringing")
-    print("- Decrease SNR for more smoothing but less accuracy")
-    print("- Check that your S2P file covers the pulse bandwidth")
+
 
 if __name__ == "__main__":
     main()
