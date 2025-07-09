@@ -132,8 +132,9 @@ def plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequenc
     axes[1, 0].set_title('Complete Process: Original → Filtered → Recovered')
     axes[1, 0].legend()
     axes[1, 0].grid(True)
-    
-    # Plot 4: Recovery comparison (zoomed)
+
+    # [Time Domain Fidelity]
+    # Plot 4: Recovery comparison (zoomed) 
     axes[1, 1].plot(time*1e9, original_pulse, 'b-', linewidth=2, label='Original Pulse')
     axes[1, 1].plot(time*1e9, recovered_pulse, 'g-', linewidth=2, label='Recovered Pulse')
     axes[1, 1].set_xlabel('Time (ns)')
@@ -216,6 +217,7 @@ def main():
     print(f"Original pulse peak: {np.max(original_pulse):.3f}")
     print(f"Filtered pulse peak: {np.max(np.abs(filtered_pulse)):.3f}")
     
+    # add noise here
     filtered_pulse = add_noise_to_signal(filtered_pulse, 40)
   
     # Step 4: Apply Wiener deconvolution
