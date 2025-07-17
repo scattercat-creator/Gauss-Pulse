@@ -1,62 +1,18 @@
+'''
+1. Find power spectral density of gaussian pulse
+2. Do a zero equalization of transfer
+3. Do transfer function times zero equalization filter
+4. Should get flat thing
+5. Do transfer function times wiener filter
+'''
 
 
-# '''
-# 1. Find power spectral density of gaussian pulse
-# 2. Do a zero equalization of transfer
-# 3. Do transfer function times zero equalization filter
-# 4. Should get flat thing
-# 5. Do transfer function times wiener filter
-# '''
 
 import skrf as rf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq, ifft
-
-def Create_Gaussian_Pulse(amplitude=1.0, center_time=0.0, standard_deviation=.02, range=10, num_points=1024):
-    time = np.linspace(-range, range, num_points)
-    gaussian_pulse = amplitude * np.exp(-((time - center_time)**2) / (2 * standard_deviation**2))
-    
-    plt.figure(figsize=(10, 4))
-    plt.plot(time, gaussian_pulse)
-    plt.xlabel('Time (s)')
-    plt.ylabel('Amplitude')
-    plt.title(f'Gaussian Pulse (σ = {standard_deviation}s)')
-    plt.grid(True)
-    plt.show()
-    
-    return time, gaussian_pulse
-
-def Load_Transfer_Function(filename):
-    # load s2p
-    network = rf.Network(filename)
-    # grab s21 values and frequency
-    s21 = network.s[:,1,0]
-    frequency = network.f
-    return frequency, s21
-
-def Power_Spectral_Density(signal, time):
-    X = fft(signal)
-    N = len(signal)
-    fs = 1/(time[1] - time[0])
-    freqs = fftfreq(N, d=1/fs)
-    mask = freqs >= 0
-    freqs_pos = freqs[mask]
-    psd_fft = (np.abs(X[mask])**2) / (fs * N)
-
-
-"""
-Fixed Wiener Deconvolution with Zero Equalization
-Authors: Nicholas David-John White, Nathan Campos Pimenten Garcia
-"""
-
-import skrf as rf
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import welch
-from scipy.fft import fft, fftfreq
 
 def Create_Gaussian_Pulse(amplitude=1.0, center_time=0.0, standard_deviation=0.02, range=10, num_points=1024):
     """Create Gaussian pulse - using narrower pulse for visible spectrum"""
