@@ -10,11 +10,7 @@ def load_s2p_filter(filename):
     # Grab s21 values an frequency
     s21 = network.s[:,1,0]
     frequency = network.f
-    
-    # Remove last 75 points to get rid of random noise
-    s21 = s21[:-75]
-    frequency = frequency[:-75]
-    
+
     return frequency, s21
 
 # create a train of gaussian pulses
@@ -34,20 +30,25 @@ def create_gaussian_pulse_train(duration=2e-6, num_points=2000, fwhm=100e-9, amp
 
 # create regular gaussian pulse
 def create_gaussian_pulse(duration=1200e-9, num_points=1000, fwhm=200e-9, amplitude=1.0):
+    
     t = np.linspace(-duration/2, duration/2, num_points)
+
     sigma = fwhm / 2.355
+    
     pulse = amplitude * np.exp(-(t ** 2) / (2 * sigma ** 2))
+    
     return t, pulse
 
 # applies the s2p to a signal
 def apply_s2p_filter(pulse, time, frequency, s21):
     # Get FFT of pulse
     pulse_fft = np.fft.fft(pulse)
-    freq_signal = np.fft.fftfreq(len(pulse), time[1] - time[0])
+    freq_signal = np.fft.fftfreq(len(pulse), time[1] - time[0]) # look for length of frequ signal <- should be num bins
+                                                                # check settings for np.ffft
     
     # Interpolate S21 to match signal frequency grid
-    freq_abs = np.abs(freq_signal)
-    s21_interp = np.interp(freq_abs, frequency, s21)
+    freq_abs = np.abs(freq_signal)                              # plot both imaginary and real
+    s21_interp = np.interp(freq_abs, frequency, s21)            # signal
     
     # Set to zero beyond S21 frequency range
     s21_interp[freq_abs > frequency[-1]] = 0
@@ -91,21 +92,22 @@ def wiener_deconvolution(filtered_pulse, time, frequency, s21, snr=10):
     
     # Calculate Wiener filter
     s21_power = np.abs(s21_interp)**2
+
     noise_power = np.mean(s21_power) / snr
-    regularization = 1e-10
+    regularization =1e-6 #1e-10
     
     # Wiener deconvolution formula
     H_wiener = np.conj(s21_interp) / (s21_power + noise_power + regularization)
-    
+
     # Apply Wiener filter
     recovered_fft = filtered_fft * H_wiener
     recovered_pulse = np.fft.ifft(recovered_fft)
-    
-    return recovered_pulse.real
+    return recovered_pulse
+#    return recovered_pulse.real
 
 def plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequency, s21):
     """Plot all results"""
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(15, 8))
     
     # Plot 1: S21 magnitude response
     axes[0, 0].plot(frequency/1e9, 20*np.log10(np.abs(s21)), 'b-', linewidth=2)
@@ -146,40 +148,53 @@ def plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequenc
     plt.tight_layout()
     plt.show()
 
-def plot_ffts(pulse, time, recovered):
+def plot_ffts(pulse, time, recovered, filtered_pulse):
     pulse_fft = np.fft.fft(pulse)
     freq_signal = np.fft.fftfreq(len(pulse), time[1] - time[0])
     recovered_fft = np.fft.fft(recovered)
+    filtered_pulse_fft = np.fft.fft(filtered_pulse)
 
     n = len(pulse)
     freq_signal = freq_signal[:n//2]
     pulse_fft = pulse_fft[:n//2]
     recovered_fft = recovered_fft[:n//2]
+    filtered_pulse_fft = filtered_pulse_fft[:n//2]
     # FFT of original pulse
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig, axes = plt.subplots(2, 2, figsize=(15, 5))
 
-    axes[0].plot(freq_signal, np.abs(pulse_fft), 'b-', linewidth=2, label='original pulse fft')
-    axes[0].set_xlabel('frequency')
-    axes[0].set_ylabel('Amplitude')
-    axes[0].set_title('Original FFT')
-    axes[0].grid(True)
+    axes[0,0].plot(freq_signal, np.abs(pulse_fft), 'b-', linewidth=2, label='original pulse fft')
+    axes[0,0].set_xlabel('frequency')
+    axes[0,0].set_ylabel('Amplitude')
+    axes[0,0].set_title('Original FFT')
+    axes[0,0].grid(True)
 
+    # plot conjugate 
     
     # FFT of recovered pulse
-    axes[1].plot(freq_signal, np.abs(recovered_fft), 'g-', linewidth=2, label="Recovered pulse fft")
-    axes[1].set_xlabel('frequency')
-    axes[1].set_ylabel('amplitude')
-    axes[1].set_title('Recovered Signal\'s FFT')
-    axes[1].grid(True)
+    axes[1,0].plot(freq_signal, np.abs(recovered_fft), 'g-', linewidth=2, label="Recovered pulse fft")
+    axes[1,0].set_xlabel('frequency')
+    axes[1,0].set_ylabel('amplitude')
+    axes[1,0].set_title('Recovered Signal\'s FFT')
+    axes[1,0].grid(True)
 
-    axes[2].plot(freq_signal, np.abs(pulse_fft), 'b-', linewidth=2, label="Original pulse fft")
-    axes[2].plot(freq_signal, np.abs(recovered_fft), 'g--', linewidth=2, label="Recovered pulse fft")
+    axes[1,1].plot(freq_signal, np.abs(pulse_fft), 'b-', linewidth=2, label="Original pulse fft")
+    axes[1,1].plot(freq_signal, np.abs(recovered_fft), 'g--', linewidth=2, label="Recovered pulse fft")
 
-    axes[2].set_xlabel('frequency')
-    axes[2].set_ylabel('amplitude')
-    axes[2].set_title('Recovered FFT vs Original FFT')
-    axes[2].legend()
-    axes[2].grid(True)
+    axes[1,1].set_xlabel('frequency')
+    axes[1,1].set_ylabel('amplitude')
+    axes[1,1].set_title('Recovered FFT vs Original FFT')
+    axes[1,1].legend()
+    axes[1,1].grid(True)
+
+    axes[0,1].plot(freq_signal, np.abs(pulse_fft), 'b-', linewidth=2, label="Original pulse fft")
+    axes[0,1].plot(freq_signal, np.abs(recovered_fft), 'g--', linewidth=2, label="Recovered pulse fft")
+    axes[0,1].plot(freq_signal, np.abs(filtered_pulse_fft), 'r-', linewidth=2, label="Filtered pulse fft")
+
+    axes[0,1].set_xlabel('frequency')
+    axes[0,1].set_ylabel('amplitude')
+    axes[0,1].set_title('Recovered FFT vs Original FFT')
+    axes[0,1].legend()
+    axes[0,1].grid(True)
 
     plt.tight_layout()
     plt.show()
@@ -188,15 +203,21 @@ def plot_ffts(pulse, time, recovered):
 
 def main():
     # Parameters
-    S2P_FILENAME = 'filter_time_series.s2p' # Can change s2p to use different frequency responses
+    S2P_FILENAME = 'converted_filter.s2p' # Can change s2p to use different frequency responses
+    # PULSE_DURATION = 1e-6       # shorter total duration (optional, helps if you want better time resolution)
+    # NUM_POINTS = 2**14          # = 16,384 → higher FFT resolution
+    # PULSE_FWHM = 20e-9           # very sharp pulse → high frequency content
+    # SPACING = 200e-9 
+
     PULSE_DURATION = 2e-6
     NUM_POINTS = 8192
-    PULSE_FWHM = 50e-9      
-    SPACING=400e-9         
+    PULSE_FWHM = 1e-9 #50e-9      
+    SPACING= 400e-9         
     NUM_PULSES=3            
     PULSE_AMPLITUDE = 1.0    
-    SNR = 100 # Signal-to-noise ratio for Wiener filter
+    SNR = 40 #100 # Signal-to-noise ratio for Wiener filter
     
+
     print("=== S2P Filter and Wiener Recovery Program ===\n")
     
     # Step 1: Load S2P file
@@ -204,6 +225,8 @@ def main():
     frequency, s21 = load_s2p_filter(S2P_FILENAME)
     print(f"Loaded {len(frequency)} frequency points from {frequency[0]/1e9:.2f} to {frequency[-1]/1e9:.2f} GHz")
     
+    
+
     # Step 2: Create Gaussian pulse
     print("2. Creating Gaussian pulse...")
     #time, original_pulse = create_gaussian_pulse(PULSE_DURATION, NUM_POINTS, PULSE_FWHM, PULSE_AMPLITUDE)
@@ -214,6 +237,12 @@ def main():
     # Step 3: Apply S2P filter
     print("3. Applying S2P filter to pulse...")
     filtered_pulse = apply_s2p_filter(original_pulse, time, frequency, s21)
+
+    plt.figure(figsize=(15,7))
+    s21_power = np.abs(s21)**2
+    snr = SNR
+    plt.plot(frequency, s21 * ((np.conj(s21) / (s21_power + (np.mean(s21_power) / snr) +10e-9))))
+    plt.show()
     print(f"Original pulse peak: {np.max(original_pulse):.3f}")
     print(f"Filtered pulse peak: {np.max(np.abs(filtered_pulse)):.3f}")
     
@@ -248,7 +277,7 @@ def main():
     # Step 6: Plot results
     print("6. Plotting results...")
     plot_results(time, original_pulse, filtered_pulse, recovered_pulse, frequency, s21)
-    plot_ffts(original_pulse, time, recovered_pulse)
+    plot_ffts(original_pulse, time, recovered_pulse, filtered_pulse)
 
 
 if __name__ == "__main__":
