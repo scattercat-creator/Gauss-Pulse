@@ -7,7 +7,6 @@
 '''
 
 import skrf as rf
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq, ifft
@@ -97,7 +96,7 @@ def Zero_Equalization(transfer_function, transfer_frequencies, regularization=0)
     
     return equalizer
 
-def Create_Noise(signal, time, noise_std =0.05):
+def Create_Noise(signal, time, noise_std =0.01):
     noise = np.random.normal(0, noise_std, size=signal.shape)
     noisy_signal = signal + noise
 
@@ -166,24 +165,41 @@ def Wiener_Filter(transfer_function, transfer_frequencies, psd_signal, psd_signa
     return w_filter
 
 def Apply_Filter_to_Signal(signal, time, filter, filter_freqs, name):
-    # Get signal's frequency grid
+    # --- frequency–domain filtering (robust version) ---------------------------
     X = fft(signal)
     N = len(signal)
-    fs = 1/(time[1] - time[0])
-    freqs = fftfreq(N, d=1/fs)
-    bins = fs/N
-    print(f'bins: {bins}')
-    # Interpolate filter to signal's frequency grid
-    # Handle positive and negative frequencies properly
+    fs = 1 / (time[1] - time[0])           # sampling-rate
+    freqs = fftfreq(N, d=1/fs)             # ±-Nyquist grid
+
+    # 1)  absolute–value grid for interpolation
     freqs_abs = np.abs(freqs)
-    filter_interp = np.interp(freqs_abs, filter_freqs, filter)
-    
-    # Set to zero beyond filter frequency range
-    filter_interp[freqs_abs > filter_freqs[-1]] = 0
-    
-    # Apply filter
-    filtered_fft = X * filter_interp
-    filtered_signal = ifft(filtered_fft)
+
+    # 2)  interpolate H(f) (or Wiener filter) onto full FFT grid
+    #     – left = value at f=0
+    #     – right = keep the last measured value (no hard zero)
+    filter_interp = np.interp(
+            freqs_abs,
+            filter_freqs,
+            filter,                     # measured / designed filter (complex!)
+            left=filter[0],
+            right=filter[-1]
+    )
+
+    # 3)  optional smooth roll-off beyond last measured frequency
+    f_stop = filter_freqs[-1]
+    f_max  = freqs_abs.max()
+    mask   = freqs_abs > f_stop
+    if mask.any():
+        taper = 0.5 * (1 + np.cos(np.pi * (freqs_abs[mask] - f_stop) / (f_max - f_stop)))
+        filter_interp[mask] *= taper          # cosine taper instead of brick-wall
+
+    # 4)  apply filter
+    Y = X * filter_interp
+    filtered_signal = ifft(Y)
+    filtered_signal = np.real(filtered_signal)        # drop tiny imag component
+    filtered_signal -= np.mean(filtered_signal)       # remove DC shift
+
+    filtered_fft = fft(filtered_signal)
 
     # Plot results
     plt.figure(figsize=(12, 4))
@@ -236,7 +252,7 @@ def Before_VS_After(original_signal, new_signal, time):
     plt.plot(time*1e9, np.real(new_signal), 'r-', label='Recovered Pulse')
     plt.xlabel('Time (ns)')
     plt.ylabel('Amplitude')
-    plt.title('Time Domain: Origianal Vs Recovered Signal')
+    plt.title('Time Domain: Original Vs Recovered Signal')
     plt.legend()
     plt.grid(True)
     
@@ -245,24 +261,27 @@ def Before_VS_After(original_signal, new_signal, time):
     plt.plot(freqs_abs[:N//2]/1e6, 20*np.log10(np.abs(new_fft[:N//2])), 'r-', label='Recovered Spectrum')
     plt.xlabel('Frequency (MHz)')
     plt.ylabel('Magnitude (dB)')
-    plt.title('Frequency Domain: Origianal Vs Recovered Signal')
+    plt.title('Frequency Domain: Original Vs Recovered Signal')
     plt.legend()
     plt.grid(True)
     
     plt.tight_layout()
     plt.show()
 
-def Comprehensive_Error_Analysis(original_signal, recovered_signal, time, label="Recovery"):
-    """
-    Comprehensive error analysis for signal recovery performance
-    """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.fft import fft, fftfreq
+def Comprehensive_Error_Analysis(original_signal, recovered_signal, time, noisy_signal, label="Recovery"):
     
     # Ensure signals are real and same length
     original_signal = np.real(original_signal)
     recovered_signal = np.real(recovered_signal)
+
+    noisy_signal = np.real(noisy_signal)
+    error = original_signal - noisy_signal
+    rmse = np.sqrt(np.mean(error**2))
+    norm_factor = np.max(original_signal) - np.min(original_signal)  # You can also try np.mean(original) or np.linalg.norm(original)
+    nrmse = (rmse / norm_factor) * 100
+    print(f'distorted signal had nrmse of {nrmse}%')
+    
+    
     
     if len(original_signal) != len(recovered_signal):
         min_len = min(len(original_signal), len(recovered_signal))
@@ -542,23 +561,23 @@ def main():
     # creates an equalizer for the transfer function
     equalizer = Zero_Equalization(s21, transfer_frequencies)
 
-    # apply s21 filter to signal 
-    filtered_signal = Apply_Filter_to_Signal(gauss_pulse, time, s21, transfer_frequencies, "Transfer Function")
-
+  
     # creates noise and adds it to signal
-    noise, filtered_signal = Create_Noise(filtered_signal, time)
+    noise, filtered_signal = Create_Noise(gauss_pulse, time)
+  # apply s21 filter to signal 
+    filtered_signal = Apply_Filter_to_Signal(filtered_signal, time, s21, transfer_frequencies, "Transfer Function")
+    filtered_noise = Apply_Filter_to_Signal(noise, time, s21, transfer_frequencies, "Noise Through Transfer Function")
 
     # grabs the power spectral density of the noise
-    psd_noise_freqs, psd_noise = Power_Spectral_Density(noise, time, "Gaussian White Noise")
+    psd_noise_freqs, psd_noise = Power_Spectral_Density(filtered_noise, time, "Gaussian White Noise")
     
     # wiener filter with noise
-    w_filter = Wiener_Filter(s21, transfer_frequencies, psd_signal, psd_signal_freqs)
     w_filter = Wiener_Filter(s21, transfer_frequencies, psd_signal, psd_signal_freqs, psd_noise, psd_noise_freqs)
     new_signal = Apply_Filter_to_Signal(filtered_signal, time, w_filter, transfer_frequencies, "Wiener Filter")
 
     Before_VS_After(gauss_pulse, new_signal, time)
 
-    Comprehensive_Error_Analysis(gauss_pulse, new_signal, time)
+    Comprehensive_Error_Analysis(gauss_pulse, new_signal, time, filtered_signal)
 
 
 
