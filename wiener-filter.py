@@ -1,16 +1,9 @@
-'''
-1. Find power spectral density of gaussian pulse
-2. Do a zero equalization of transfer
-3. Do transfer function times zero equalization filter
-4. Should get flat thing
-5. Do transfer function times wiener filter
-'''
-
 import skrf as rf
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq, ifft
 from scipy.signal import argrelextrema
+import csv
 
 
 def Create_Gaussian_Pulse(amplitude=1.0, center_time=0.0, standard_deviation=20e-9, range=200e-9, num_points=1024):
@@ -29,7 +22,7 @@ def Create_Gaussian_Pulse(amplitude=1.0, center_time=0.0, standard_deviation=20e
     return time, gaussian_pulse
 
 def Load_Transfer_Function(filename):
-    """Load S2P file and return frequency and S21"""
+
     network = rf.Network(filename)
     s21 = network.s[:,1,0]
     frequency = network.f
@@ -96,7 +89,7 @@ def Zero_Equalization(transfer_function, transfer_frequencies, regularization=0)
     
     return equalizer
 
-def Create_Noise(signal, time, noise_std =0.01):
+def Create_Noise(signal, time, noise_std =0.1):
     noise = np.random.normal(0, noise_std, size=signal.shape)
     noisy_signal = signal + noise
 
@@ -111,7 +104,6 @@ def Create_Noise(signal, time, noise_std =0.01):
     plt.show()
     
     return noise, noisy_signal
-
 
 def Wiener_Filter(transfer_function, transfer_frequencies, psd_signal, psd_signal_freq, psd_noise=None, psd_noise_freq=None):
     # INTERPOLATE
@@ -577,8 +569,16 @@ def main():
 
     Before_VS_After(gauss_pulse, new_signal, time)
 
+    Comprehensive_Error_Analysis(gauss_pulse, filtered_signal, time, filtered_signal)
+
     Comprehensive_Error_Analysis(gauss_pulse, new_signal, time, filtered_signal)
 
+    with open("output.csv", "w", newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["Frequency (MHz)", "Wiener Filter"])
+        writer.writerows(zip(transfer_frequencies, np.abs(w_filter)))
+
+    print("Wiener filter applied and results saved to output.csv")
 
 
 if __name__ == "__main__":
